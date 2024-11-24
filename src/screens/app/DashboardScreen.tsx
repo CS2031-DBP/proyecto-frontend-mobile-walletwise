@@ -1,40 +1,54 @@
+// DashboardScreen.tsx
 import React, { useEffect, useState } from "react";
 import { View, StyleSheet, ScrollView, RefreshControl } from "react-native";
-import { Text, FAB } from "react-native-paper";
+import { Text, FAB, Button, IconButton } from "react-native-paper";
 import { useAuth } from "../../context/AuthContext";
 import { cuentaApi } from "../../api/cuenta.api";
+import { transactionApi } from "../../api/transaction.api";
 import { Cuenta } from "../../types/cuenta.types";
+import { Transaccion } from "../../types/transaction.types";
 import { CuentaCard } from "../../components/CuentaCard";
+import { TransactionCard } from "../../components/TransactionCard";
 
 export const DashboardScreen = ({ navigation }: any) => {
   const { user } = useAuth();
   const [cuentas, setCuentas] = useState<Cuenta[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [totalBalance, setTotalBalance] = useState(0);
+  const [recentTransactions, setRecentTransactions] = useState<Transaccion[]>(
+    []
+  );
 
-  const loadCuentas = async () => {
+  const loadData = async () => {
     try {
       setIsLoading(true);
-      const response = await cuentaApi.getMisCuentas();
-      setCuentas(response);
+      const [cuentasResponse, transaccionesResponse] = await Promise.all([
+        cuentaApi.getMisCuentas(),
+        transactionApi.getMisTransacciones(),
+      ]);
 
-      const total = response.reduce((acc, cuenta) => acc + cuenta.saldo, 0);
+      setCuentas(cuentasResponse);
+      setRecentTransactions(transaccionesResponse.slice(0, 5));
+
+      const total = cuentasResponse.reduce(
+        (acc, cuenta) => acc + cuenta.saldo,
+        0
+      );
       setTotalBalance(total);
     } catch (error) {
-      console.error("Error cargando cuentas:", error);
+      console.error("Error cargando datos:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadCuentas();
+    loadData();
   }, [user?.id]);
 
-  // Suscribirse a eventos de navegación para recargar cuando vuelva a la pantalla
   useEffect(() => {
     const unsubscribe = navigation.addListener("focus", () => {
-      loadCuentas();
+      loadData();
     });
 
     return unsubscribe;
@@ -44,7 +58,7 @@ export const DashboardScreen = ({ navigation }: any) => {
     <View style={styles.container}>
       <ScrollView
         refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={loadCuentas} />
+          <RefreshControl refreshing={isLoading} onRefresh={loadData} />
         }
       >
         <View style={styles.header}>
@@ -57,7 +71,15 @@ export const DashboardScreen = ({ navigation }: any) => {
         </View>
 
         <View style={styles.cuentasSection}>
-          <Text style={styles.sectionTitle}>Tus Cuentas</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Tus Cuentas</Text>
+            <IconButton
+              icon="plus"
+              size={24}
+              onPress={() => navigation.navigate("CreateCuenta")}
+              iconColor="#007AFF"
+            />
+          </View>
           {cuentas.length > 0 ? (
             cuentas.map((cuenta) => (
               <CuentaCard key={cuenta.id} cuenta={cuenta} />
@@ -66,13 +88,44 @@ export const DashboardScreen = ({ navigation }: any) => {
             <Text style={styles.emptyText}>No tienes cuentas registradas</Text>
           )}
         </View>
+
+        <View style={styles.transactionsSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Últimas Transacciones</Text>
+            <IconButton
+              icon="plus"
+              size={24}
+              onPress={() => navigation.navigate("CreateTransaction")}
+              iconColor="#007AFF"
+            />
+          </View>
+          {recentTransactions.length > 0 ? (
+            <>
+              {recentTransactions.map((transaction) => (
+                <TransactionCard
+                  key={transaction.id}
+                  transaction={transaction}
+                />
+              ))}
+              <Button
+                mode="text"
+                onPress={() => navigation.navigate("Transactions")}
+                style={styles.viewAllButton}
+              >
+                Ver todas las transacciones
+              </Button>
+            </>
+          ) : (
+            <Text style={styles.emptyText}>No hay transacciones recientes</Text>
+          )}
+        </View>
       </ScrollView>
 
       <FAB
         style={styles.fab}
         icon="plus"
-        onPress={() => navigation.navigate("CreateCuenta")}
-        label="Nueva Cuenta"
+        onPress={() => navigation.navigate("CreateTransaction")}
+        label="Nueva Transacción"
       />
     </View>
   );
@@ -98,18 +151,32 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#007AFF",
   },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 15,
+  },
   cuentasSection: {
     padding: 20,
+    backgroundColor: "#fff",
+    marginBottom: 10,
+  },
+  transactionsSection: {
+    padding: 20,
+    backgroundColor: "#fff",
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: "600",
-    marginBottom: 15,
   },
   emptyText: {
     textAlign: "center",
     color: "#666",
     marginTop: 20,
+  },
+  viewAllButton: {
+    marginTop: 10,
   },
   fab: {
     position: "absolute",
