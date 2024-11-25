@@ -7,12 +7,26 @@ import {
   Platform,
   Alert,
 } from "react-native";
-import { TextInput, Button, SegmentedButtons, Text } from "react-native-paper";
+import {
+  TextInput,
+  Button,
+  SegmentedButtons,
+  Text,
+  IconButton,
+} from "react-native-paper";
 import { Picker } from "@react-native-picker/picker";
-import { Transaccion, TipoTransaccion } from "../types/transaction.types";
+import {
+  Transaccion,
+  TipoTransaccion,
+  TransactionLocation,
+} from "../types/transaction.types";
 import { transactionApi } from "../api/transaction.api";
+import { locationStorage } from "../utils/locationStorage";
 import { cuentaApi } from "../api/cuenta.api";
+import { categoriaApi } from "../api/categoria.api";
 import { Cuenta } from "../types/cuenta.types";
+import { Categoria } from "../types/categoria.types";
+import * as Location from "expo-location";
 
 export const CreateTransactionScreen = ({ navigation }: any) => {
   const [formData, setFormData] = useState({
@@ -20,14 +34,59 @@ export const CreateTransactionScreen = ({ navigation }: any) => {
     destinatario: "",
     tipo: TipoTransaccion.GASTO,
     cuentaId: 0,
-    categoriaId: 1, // Por ahora hardcodeado hasta implementar categorías
+    categoriaId: 0,
   });
+
   const [isLoading, setIsLoading] = useState(false);
   const [cuentas, setCuentas] = useState<Cuenta[]>([]);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [location, setLocation] = useState<TransactionLocation | null>(null);
+  const [locationPermission, setLocationPermission] = useState<boolean>(false);
 
   useEffect(() => {
     loadCuentas();
+    loadCategorias();
+    requestLocationPermission();
   }, []);
+
+  const requestLocationPermission = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      setLocationPermission(status === "granted");
+
+      if (status === "granted") {
+        await getCurrentLocation();
+      }
+    } catch (error) {
+      console.error("Error solicitando permisos de ubicación:", error);
+    }
+  };
+
+  const getCurrentLocation = async () => {
+    try {
+      const currentLocation = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      // Obtener la dirección usando geocoding inverso
+      const [geocodeResponse] = await Location.reverseGeocodeAsync({
+        latitude: currentLocation.coords.latitude,
+        longitude: currentLocation.coords.longitude,
+      });
+
+      setLocation({
+        latitude: currentLocation.coords.latitude,
+        longitude: currentLocation.coords.longitude,
+        direccion: geocodeResponse
+          ? `${geocodeResponse.street || ""} ${geocodeResponse.name || ""}, ${
+              geocodeResponse.city || ""
+            }`.trim()
+          : undefined,
+      });
+    } catch (error) {
+      console.error("Error obteniendo ubicación:", error);
+    }
+  };
 
   const loadCuentas = async () => {
     try {
@@ -41,11 +100,27 @@ export const CreateTransactionScreen = ({ navigation }: any) => {
     }
   };
 
+  const loadCategorias = async () => {
+    try {
+      const response = await categoriaApi.getMisCategorias();
+      setCategorias(response);
+      if (response.length > 0) {
+        setFormData((prev) => ({
+          ...prev,
+          categoriaId: response[0].id || 0,
+        }));
+      }
+    } catch (error) {
+      console.error("Error cargando categorías:", error);
+    }
+  };
+
   const handleCreate = async () => {
     if (
       !formData.destinatario.trim() ||
       !formData.monto ||
-      !formData.cuentaId
+      !formData.cuentaId ||
+      !formData.categoriaId
     ) {
       Alert.alert("Error", "Por favor complete todos los campos");
       return;
@@ -66,9 +141,24 @@ export const CreateTransactionScreen = ({ navigation }: any) => {
         tipo: formData.tipo,
         cuentaId: formData.cuentaId,
         categoriaId: formData.categoriaId,
+        ubicacion: location || undefined,
       };
 
-      await transactionApi.createTransaction(newTransaction);
+      // Crear la transacción y obtener la respuesta
+      const createdTransaction = await transactionApi.createTransaction(
+        newTransaction
+      );
+
+      // Si tenemos ubicación y la transacción se creó exitosamente con un ID
+      if (location && createdTransaction.id) {
+        console.log(
+          "Guardando ubicación para transacción:",
+          createdTransaction.id
+        );
+        await locationStorage.saveLocation(createdTransaction.id, location);
+        console.log("Ubicación guardada exitosamente");
+      }
+
       Alert.alert("Éxito", "Transacción creada correctamente");
       navigation.goBack();
     } catch (error) {
@@ -148,6 +238,61 @@ export const CreateTransactionScreen = ({ navigation }: any) => {
           </Picker>
         </View>
 
+        <Text style={styles.label}>Categoría</Text>
+        <View style={styles.pickerContainer}>
+          <Picker
+            selectedValue={formData.categoriaId}
+            onValueChange={(itemValue) =>
+              setFormData((prev) => ({
+                ...prev,
+                categoriaId: Number(itemValue),
+              }))
+            }
+          >
+            {categorias.map((categoria) => (
+              <Picker.Item
+                key={categoria.id}
+                label={categoria.nombre}
+                value={categoria.id}
+              />
+            ))}
+          </Picker>
+        </View>
+
+        <View style={styles.locationContainer}>
+          <Text style={styles.label}>Ubicación</Text>
+          {locationPermission ? (
+            <>
+              <View style={styles.locationInfo}>
+                <Text style={styles.locationText}>
+                  {location?.direccion || "Obteniendo ubicación..."}
+                </Text>
+                <IconButton
+                  icon="refresh"
+                  size={20}
+                  onPress={getCurrentLocation}
+                  disabled={isLoading}
+                />
+              </View>
+              {location && (
+                <Text style={styles.coordsText}>
+                  {`${location.latitude.toFixed(
+                    6
+                  )}, ${location.longitude.toFixed(6)}`}
+                </Text>
+              )}
+            </>
+          ) : (
+            <Button
+              mode="outlined"
+              onPress={requestLocationPermission}
+              style={styles.permissionButton}
+            >
+              Permitir acceso a ubicación
+            </Button>
+          )}
+        </View>
+
         <Button
           mode="contained"
           onPress={handleCreate}
@@ -192,8 +337,36 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#ddd",
   },
+  locationContainer: {
+    marginBottom: 15,
+  },
+  locationInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "white",
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    padding: 10,
+  },
+  locationText: {
+    flex: 1,
+    fontSize: 14,
+    color: "#333",
+  },
+  coordsText: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 5,
+    textAlign: "center",
+  },
+  permissionButton: {
+    marginTop: 5,
+  },
   button: {
     marginTop: 20,
     padding: 5,
   },
 });
+
+export default CreateTransactionScreen;

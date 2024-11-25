@@ -9,16 +9,14 @@ import {
 export const authApi = {
   login: async (credentials: LoginCredentials): Promise<AuthResponse> => {
     try {
-      console.log("API: Intentando login con:", credentials);
       const response = await axiosInstance.post<AuthResponse>(
         "/auth/login",
         credentials
       );
-      console.log("API: Respuesta exitosa:", response.data);
+      console.log("Respuesta del login:", response.data); // Debug
       return response.data;
     } catch (error: any) {
-      console.error("API: Error completo:", error);
-      console.error("API: Respuesta del servidor:", error.response?.data);
+      console.error("Error en login:", error);
       throw error;
     }
   },

@@ -1,132 +1,90 @@
-// DashboardScreen.tsx
 import React, { useEffect, useState } from "react";
-import { View, StyleSheet, ScrollView, RefreshControl } from "react-native";
-import { Text, FAB, Button, IconButton } from "react-native-paper";
+import { View, StyleSheet, TouchableOpacity } from "react-native";
+import { Text } from "react-native-paper";
+import { useNavigation } from "@react-navigation/native";
+import { NavigationProps } from "../../types/navigation.types";
 import { useAuth } from "../../context/AuthContext";
 import { cuentaApi } from "../../api/cuenta.api";
-import { transactionApi } from "../../api/transaction.api";
-import { Cuenta } from "../../types/cuenta.types";
-import { Transaccion } from "../../types/transaction.types";
-import { CuentaCard } from "../../components/CuentaCard";
-import { TransactionCard } from "../../components/TransactionCard";
+import { Moneda } from "../../types/cuenta.types";
 
-export const DashboardScreen = ({ navigation }: any) => {
+export const DashboardScreen = () => {
+  const navigation = useNavigation<NavigationProps["navigation"]>();
   const { user } = useAuth();
-  const [cuentas, setCuentas] = useState<Cuenta[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [totalBalance, setTotalBalance] = useState(0);
-  const [recentTransactions, setRecentTransactions] = useState<Transaccion[]>(
-    []
-  );
+  const [totalBalance, setTotalBalance] = useState<Record<Moneda, number>>({
+    [Moneda.USD]: 0,
+    [Moneda.PEN]: 0,
+    [Moneda.EUR]: 0,
+  });
 
-  const loadData = async () => {
+  const loadBalances = async () => {
     try {
-      setIsLoading(true);
-      const [cuentasResponse, transaccionesResponse] = await Promise.all([
-        cuentaApi.getMisCuentas(),
-        transactionApi.getMisTransacciones(),
-      ]);
+      const cuentasResponse = await cuentaApi.getMisCuentas();
 
-      setCuentas(cuentasResponse);
-      setRecentTransactions(transaccionesResponse.slice(0, 5));
-
-      const total = cuentasResponse.reduce(
-        (acc, cuenta) => acc + cuenta.saldo,
-        0
+      // Calcular balances por moneda
+      const balances = cuentasResponse.reduce(
+        (acc, cuenta) => {
+          return {
+            ...acc,
+            [cuenta.moneda]: (acc[cuenta.moneda] || 0) + cuenta.saldo,
+          };
+        },
+        {
+          [Moneda.USD]: 0,
+          [Moneda.PEN]: 0,
+          [Moneda.EUR]: 0,
+        } as Record<Moneda, number>
       );
-      setTotalBalance(total);
+
+      setTotalBalance(balances);
     } catch (error) {
-      console.error("Error cargando datos:", error);
-    } finally {
-      setIsLoading(false);
+      console.error("Error cargando balances:", error);
     }
   };
 
   useEffect(() => {
-    loadData();
-  }, [user?.id]);
-
-  useEffect(() => {
-    const unsubscribe = navigation.addListener("focus", () => {
-      loadData();
-    });
-
-    return unsubscribe;
-  }, [navigation]);
+    loadBalances();
+  }, []);
 
   return (
     <View style={styles.container}>
-      <ScrollView
-        refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={loadData} />
-        }
-      >
-        <View style={styles.header}>
-          <Text style={styles.welcomeText}>
-            Bienvenido{user?.nombre ? `, ${user.nombre}` : ""}
-          </Text>
-          <Text style={styles.balanceText}>
-            Balance Total: S/. {totalBalance.toFixed(2)}
-          </Text>
-        </View>
+      {/* Header Section */}
+      <View style={styles.header}>
+        <Text style={styles.welcomeText}>
+          Bienvenido{user?.nombre ? `, ${user.nombre}` : ""}
+        </Text>
 
-        <View style={styles.cuentasSection}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Tus Cuentas</Text>
-            <IconButton
-              icon="plus"
-              size={24}
-              onPress={() => navigation.navigate("CreateCuenta")}
-              iconColor="#007AFF"
-            />
-          </View>
-          {cuentas.length > 0 ? (
-            cuentas.map((cuenta) => (
-              <CuentaCard key={cuenta.id} cuenta={cuenta} />
-            ))
-          ) : (
-            <Text style={styles.emptyText}>No tienes cuentas registradas</Text>
-          )}
+        <View style={styles.balancesContainer}>
+          {Object.entries(totalBalance).map(([moneda, monto]) => (
+            <Text key={moneda} style={styles.balanceText}>
+              Balance {moneda}: {monto.toFixed(2)}
+            </Text>
+          ))}
         </View>
+      </View>
 
-        <View style={styles.transactionsSection}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Últimas Transacciones</Text>
-            <IconButton
-              icon="plus"
-              size={24}
-              onPress={() => navigation.navigate("CreateTransaction")}
-              iconColor="#007AFF"
-            />
-          </View>
-          {recentTransactions.length > 0 ? (
-            <>
-              {recentTransactions.map((transaction) => (
-                <TransactionCard
-                  key={transaction.id}
-                  transaction={transaction}
-                />
-              ))}
-              <Button
-                mode="text"
-                onPress={() => navigation.navigate("Transactions")}
-                style={styles.viewAllButton}
-              >
-                Ver todas las transacciones
-              </Button>
-            </>
-          ) : (
-            <Text style={styles.emptyText}>No hay transacciones recientes</Text>
-          )}
-        </View>
-      </ScrollView>
+      {/* Navigation Buttons */}
+      <View style={styles.buttonsContainer}>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => navigation.navigate("Accounts")}
+        >
+          <Text style={styles.buttonText}>Cuentas</Text>
+        </TouchableOpacity>
 
-      <FAB
-        style={styles.fab}
-        icon="plus"
-        onPress={() => navigation.navigate("CreateTransaction")}
-        label="Nueva Transacción"
-      />
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => navigation.navigate("Transactions")}
+        >
+          <Text style={styles.buttonText}>Transacciones</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => navigation.navigate("Categories")}
+        >
+          <Text style={styles.buttonText}>Categorias</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -137,52 +95,55 @@ const styles = StyleSheet.create({
     backgroundColor: "#f5f5f5",
   },
   header: {
+    backgroundColor: "white",
     padding: 20,
-    backgroundColor: "#fff",
-    marginBottom: 10,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
   welcomeText: {
     fontSize: 24,
     fontWeight: "bold",
-    marginBottom: 10,
+    marginBottom: 15,
+  },
+  balancesContainer: {
+    gap: 8,
   },
   balanceText: {
-    fontSize: 28,
+    fontSize: 20,
     fontWeight: "600",
     color: "#007AFF",
   },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 15,
-  },
-  cuentasSection: {
+  buttonsContainer: {
+    flex: 1,
     padding: 20,
-    backgroundColor: "#fff",
-    marginBottom: 10,
+    justifyContent: "center",
+    gap: 20,
   },
-  transactionsSection: {
-    padding: 20,
-    backgroundColor: "#fff",
+  button: {
+    backgroundColor: "white",
+    borderRadius: 15,
+    padding: 25,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-  },
-  emptyText: {
+  buttonText: {
+    fontSize: 24,
     textAlign: "center",
-    color: "#666",
-    marginTop: 20,
-  },
-  viewAllButton: {
-    marginTop: 10,
-  },
-  fab: {
-    position: "absolute",
-    margin: 16,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "#007AFF",
+    color: "#007AFF",
+    fontWeight: "600",
   },
 });

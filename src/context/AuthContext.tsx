@@ -1,3 +1,4 @@
+// AuthContext.tsx
 import React, { createContext, useState, useContext } from "react";
 import { AuthResponse, User } from "../types/auth.types";
 import { saveToken, removeToken } from "../utils/tokenStorage";
@@ -15,7 +16,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const [user, setUser] = useState<User | null>(null);
 
-  // En AuthContext.tsx
   const login = async (response: AuthResponse) => {
     try {
       console.log("AuthContext: Procesando login con:", response);
@@ -27,15 +27,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       await saveToken(response.token);
 
       const userObj: User = {
-        id: response.id, // Asegúrate de que response.id existe
+        id: response.id,
         nombre: response.nombre,
         email: response.email,
         role: response.role,
         isAuthenticated: true,
       };
 
+      console.log("Usuario a establecer:", userObj);
       setUser(userObj);
-      console.log("AuthContext: Usuario establecido:", userObj);
     } catch (error) {
       console.error("Error en AuthContext login:", error);
       throw error;

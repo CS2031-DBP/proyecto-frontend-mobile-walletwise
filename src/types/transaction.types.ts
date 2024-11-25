@@ -1,6 +1,13 @@
+// src/types/transaction.types.ts
 export enum TipoTransaccion {
   GASTO = "GASTO",
   INGRESO = "INGRESO",
+}
+
+export interface TransactionLocation {
+  latitude: number;
+  longitude: number;
+  direccion?: string;
 }
 
 export interface Transaccion {
@@ -11,11 +18,5 @@ export interface Transaccion {
   tipo: TipoTransaccion;
   cuentaId: number;
   categoriaId: number;
-}
-
-export interface TransaccionesResponse {
-  totalItems: number;
-  transacciones: Transaccion[];
-  totalPages: number;
-  currentPage: number;
+  ubicacion?: TransactionLocation; // Nueva propiedad
 }

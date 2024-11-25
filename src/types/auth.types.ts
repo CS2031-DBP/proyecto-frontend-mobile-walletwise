@@ -7,7 +7,6 @@ export interface RegisterCredentials extends LoginCredentials {
   nombre: string;
 }
 
-// auth.types.ts
 export interface User {
   id: number;
   nombre: string;
@@ -18,8 +17,8 @@ export interface User {
 
 export interface AuthResponse {
   token: string;
-  role: string;
   id: number;
   nombre: string;
   email: string;
+  role: string;
 }
